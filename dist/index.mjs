@@ -1,4 +1,4 @@
-// formic runner action — commit 0a77209fde34dd2974afce502fd6fef3f0e1a93d — built 2026-10-25T04:23:32.474Z
+// formic runner action — commit d0d0b411a96c74a7e0a92c3e3e59c0e0a062973d — built 2026-10-25T04:50:22.118Z
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -41471,7 +41471,7 @@ Answer in under 300 words: the paths and line numbers, and only the lines worth 
 init_server_only_stub();
 init_zod();
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { appendFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // src/lib/agents/coder.ts
@@ -42079,15 +42079,35 @@ async function runLoopEntry(payloadInput, options = {}) {
   }
 }
 __name(runLoopEntry, "runLoopEntry");
-async function main(input2 = process.stdin, options = {}) {
-  try {
-    const report = await runLoopEntry(JSON.parse(await readAll(input2)), options);
+async function main(input2 = process.stdin, options = {}, env2 = process.env) {
+  const action = env2.INPUT_PROMPT === void 0 ? null : env2;
+  const print = /* @__PURE__ */ __name((report) => {
     process.stdout.write(`${JSON.stringify(report)}
+`);
+    if (action?.FORMIC_REPORT) writeFileSync(action.FORMIC_REPORT, `${JSON.stringify(report)}
+`);
+  }, "print");
+  try {
+    const stream2 = action?.FORMIC_STREAM;
+    const report = action ? await runLoopEntry(actionPayload(action), {
+      ...options,
+      // A step that uses an Action cannot tee its stderr, so the events
+      // the reporter posts go to the stream file as well.
+      onEvent: /* @__PURE__ */ __name((event) => {
+        options.onEvent?.(event);
+        if (stream2) appendFileSync(stream2, `${JSON.stringify(event)}
+`);
+      }, "onEvent")
+    }) : await runLoopEntry(JSON.parse(await readAll(input2)), options);
+    print(report);
+    if (action && !report.ok) process.stdout.write(`::error::${report.error}
 `);
     return report.ok ? 0 : 1;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     process.stderr.write(`The loop entry could not run: ${message}
+`);
+    if (action) process.stdout.write(`::error::${message}
 `);
     const report = {
       ok: false,
@@ -42098,12 +42118,24 @@ async function main(input2 = process.stdin, options = {}) {
       changedFiles: [],
       diff: ""
     };
-    process.stdout.write(`${JSON.stringify(report)}
-`);
+    print(report);
     return 2;
   }
 }
 __name(main, "main");
+function actionPayload(env2) {
+  if (env2.INPUT_MODE !== "loop") {
+    throw new Error(`The runner Action runs mode loop, not ${env2.INPUT_MODE || "an empty mode"}.`);
+  }
+  if (!env2.FORMIC_API_KEY) throw new Error("No API key for this agent. Add it to the agent in Formic.");
+  const payload = JSON.parse(env2.INPUT_PROMPT ?? "");
+  return {
+    ...payload,
+    apiKey: env2.FORMIC_API_KEY,
+    repo: { ...payload.repo, dir: env2.GITHUB_WORKSPACE || process.cwd() }
+  };
+}
+__name(actionPayload, "actionPayload");
 async function readAll(input2) {
   const chunks = [];
   for await (const chunk of input2) chunks.push(Buffer.from(chunk));
@@ -42174,6 +42206,7 @@ if (startedHere()) {
   });
 }
 export {
+  actionPayload,
   loopEntryPayloadSchema,
   main,
   runLoopEntry
