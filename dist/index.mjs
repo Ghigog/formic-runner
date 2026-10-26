@@ -1,4 +1,4 @@
-// formic runner action — commit d0d0b411a96c74a7e0a92c3e3e59c0e0a062973d — built 2026-10-25T04:50:22.118Z
+// formic runner action — commit 9e26ff036d0b9f1f1353b1a9c922f03735f548d1 — built 2026-10-26T00:26:04.440Z
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -39350,8 +39350,17 @@ var init_entities = __esm({
       /** May be empty only for the board's assistant, which needs no brief. */
       prompt: external_exports.string().trim().max(2e4),
       /** A new key; null clears the saved one; omitted keeps it. A Codex sign-in is a JSON file, hence the length. */
-      apiKey: external_exports.string().trim().min(1).max(2e4).nullable().optional()
-    }).refine((p) => p.model !== "" || provider(p.provider)?.kind === "cli", {
+      apiKey: external_exports.string().trim().min(1).max(2e4).nullable().optional(),
+      /** A CLI agent's Actions secret. Omitted keeps it; it must start with the CLI's own prefix. */
+      secretName: external_exports.string().trim().max(100).regex(/^[A-Z0-9_]+$/, "A secret name is capital letters, digits and underscores.").nullable().optional()
+    }).refine(
+      (p) => {
+        if (!p.secretName) return true;
+        const prefix = provider(p.provider)?.secretName;
+        return !!prefix && p.secretName.startsWith(prefix);
+      },
+      { message: "Start the secret's name with the one shown, so only this agent's secrets can be named.", path: ["secretName"] }
+    ).refine((p) => p.model !== "" || provider(p.provider)?.kind === "cli", {
       message: "Pick a model.",
       path: ["model"]
     });
